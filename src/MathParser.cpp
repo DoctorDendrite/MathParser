@@ -30,16 +30,29 @@ alg::Binary::Binary(char op, alg::expr_ptr left, alg::expr_ptr right):
 	
 alg::Binary::~Binary() {}
 
-flt_t alg::Binary::evaluate() {
+bool alg::Binary::evaluate(flt_t& value) {
+	flt_t left = 0.L, right = 0.L;
+	
+	if (!_left->evaluate(left))
+		return false;
+	
+	if (!_right->evaluate(right))
+		return false;
+	
 	switch (_op) {
-		case '+': return _left->evaluate() + _right->evaluate();
-		case '-': return _left->evaluate() - _right->evaluate();
-		case '*': return _left->evaluate() * _right->evaluate();
-		case '/': return _left->evaluate() / _right->evaluate();
-		case '^': return pow(_left->evaluate(), _right->evaluate());
+		case '+': value = left + right;
+			break;
+		case '-': value = left - right;
+			break;
+		case '*': value = left * right;
+			break;
+		case '/': value = left / right;
+			break;
+		case '^': value = pow(left, right);
+			break;
 	}
 	
-	return 0;
+	return true;
 }
 
 
@@ -48,12 +61,18 @@ alg::Unary::Unary(char op, alg::expr_ptr right):
 	
 alg::Unary::~Unary() {}
 
-flt_t alg::Unary::evaluate() {
+bool alg::Unary::evaluate(flt_t& value) {
+	flt_t right = 0.L;
+	
+	if (!_right->evaluate(right))
+		return false;
+	
 	switch (_op) {
-		case '-': return -_right->evaluate();
+		case '-': value = -right;
+			break;
 	}
 	
-	return 0;
+	return true;
 }
 
 
@@ -62,8 +81,9 @@ alg::Name::Name(const std::string& payload):
 	
 alg::Name::~Name() {}
 
-flt_t alg::Name::evaluate() {
-	return lex::named_value(_payload);
+bool alg::Name::evaluate(flt_t& value) {
+	value = lex::named_value(_payload);
+	return true;
 }
 
 
@@ -72,8 +92,9 @@ alg::Terminal::Terminal(flt_t payload):
 	
 alg::Terminal::~Terminal() {}
 
-flt_t alg::Terminal::evaluate() {
-	return _payload;
+bool alg::Terminal::evaluate(flt_t& value) {
+	value = _payload;
+	return true;
 }
 
 
@@ -82,18 +103,20 @@ alg::Functional::Functional(const std::string& name):
 
 alg::Functional::~Functional() {}
 
-flt_t alg::Functional::evaluate() {
+bool alg::Functional::evaluate(flt_t& value) {
 	args_t args;
+	flt_t temp;
 	
-	for (auto& arg : _arguments)
-		args.push_back(arg->evaluate());
+	for (auto& arg : _arguments) {
+		if (!arg->evaluate(temp))
+			return false;
+		
+		args.push_back(temp);
+	}
 	
 	auto overloads = _functions.at(_name);
-	
-	if (args.size() == 0)
-		return 0.L;
-	
-	return overloads.at(args.size())(args);
+	value = overloads.at(args.size())(args);
+	return true;
 }
 
 alg::Functional& alg::Functional::push(alg::expr_ptr argument) {
@@ -246,57 +269,70 @@ int alg::parse::current_precedence() {
 	return prec;
 }
 
-alg::expr_ptr alg::parse::new_error(const std::string& msg) {
-	throw Exception(msg);
-	return nullptr;
+bool alg::parse::new_error(alg::expr_ptr& tree, const std::string& msg) {
+	fprintf(stdout, "Error: %s\n", msg.c_str());
+	return false;
 }
 
-alg::expr_ptr alg::parse::new_terminal() {
+bool alg::parse::new_terminal(alg::expr_ptr& tree) {
 	auto result = std::make_unique<Terminal>(lex::terminal());
 	lex::next_token();
-	return std::move(result);
+	tree = std::move(result);
+	return true;
 }
 
-alg::expr_ptr alg::parse::new_group() {
+bool alg::parse::new_group(alg::expr_ptr& tree) {
+	expr_ptr node = nullptr;
 	lex::next_token();
-	auto ptr = new_expression();
 	
-	if (!ptr)
-		return nullptr;
+	if (!new_expression(node))
+		return false;
 	
-	if ((Tokens)lex::token() != Tokens::CLOSE_GROUP)
-		throw Exception("expected ')'");
+	if (!node) {
+		tree = nullptr;
+		return true;
+	}
+	
+	if ((Tokens)lex::token() != Tokens::CLOSE_GROUP) {
+		return new_error(tree, "expected ')'");
+	}
 	
 	lex::next_token();
-	return std::move(ptr);
+	tree = std::move(node);
+	return true;
 }
 
-alg::expr_ptr alg::parse::new_identifier() {
+bool alg::parse::new_identifier(alg::expr_ptr& tree) {
 	std::string name = lex::identifier();
 	lex::next_token();
 	
-	if ((Tokens)lex::token() != Tokens::OPEN_GROUP)
-		return std::make_unique<Name>(name);
+	if ((Tokens)lex::token() != Tokens::OPEN_GROUP) {
+		tree = std::make_unique<Name>(name);
+		return true;
+	}
 	
 	lex::next_token();
-	
 	auto it = _functions.find(name);
 	
 	if (it == _functions.end())
-		throw Exception(std::string("no definition found with the name '" + name + "'"));
+		return new_error(tree, std::string("no definition found with the name '" + name + "'"));
 	
 	auto functionCall = std::make_unique<Functional>(name);
+	expr_ptr arg = nullptr;
 	
 	while ((Tokens)lex::token() != Tokens::CLOSE_GROUP) {
-		if (auto arg = new_expression()) {
+		if (!new_expression(arg))
+			return false;
+			
+		if (arg)
 			functionCall->push(std::move(arg));
-		}
 	}
 	
 	auto overloads = _functions.at(name);
 	
 	if (overloads.find(functionCall->argc()) == overloads.end())
-		throw Exception(
+		return new_error(
+			tree,
 			std::string(
 				"no overload found for definition '"
 				+ name
@@ -307,69 +343,111 @@ alg::expr_ptr alg::parse::new_identifier() {
 		);
 	
 	lex::next_token();
-	return std::move(functionCall);
+	tree = std::move(functionCall);
+	return true;
 }
 
-alg::expr_ptr alg::parse::new_primary() {
+bool alg::parse::new_primary(alg::expr_ptr& tree) {
 	int op;
+	expr_ptr node = nullptr;
 	
 	switch ((Tokens)lex::token()) {
 	default:
 		op = lex::token();
 		lex::next_token();
-		return std::move(std::make_unique<Unary>(op, std::move(new_primary())));
+		
+		if (!new_primary(node))
+			return false;
+		
+		tree = std::move(std::make_unique<Unary>(op, std::move(node)));
+		break;
 	case Tokens::IDENTIFIER:
-		return std::move(new_identifier());
+		if (!new_identifier(node))
+			return false;
+		
+		tree = std::move(node);
+		break;
 	case Tokens::TERMINAL:
-		return std::move(new_terminal());
+		if (!new_terminal(node))
+			return false;
+		
+		tree = std::move(node);
+		break;
 	case Tokens::OPEN_GROUP:
-		return std::move(new_group());
+		if (!new_group(node))
+			return false;
+		
+		tree = std::move(node);
+		break;
 	case Tokens::CLOSE_GROUP:
 	case Tokens::DELIMITER:
 		lex::next_token();
-		return nullptr;
+		tree = nullptr;
+		break;
 	}
 	
-	// return new_error("unknown token when expecting an expression");
+	return true;
+	// return new_error(tree, "unknown token when expecting an expression");
 }
 
-alg::expr_ptr alg::parse::new_expression() {
-	auto left = new_primary();
+bool alg::parse::new_expression(alg::expr_ptr& tree) {
+	expr_ptr left = nullptr;
 	
-	if (!left)
-		return nullptr;
+	if (!new_primary(left))
+		return false;
 	
-	return std::move(new_binary_right(0, std::move(left)));
+	if (!left) {
+		tree = nullptr;
+		return true;
+	}
+	
+	if (!new_binary_right(tree, 0, std::move(left)))
+		return false;
+	
+	return true;
 }
 
-alg::expr_ptr alg::parse::new_binary_right(int exprPrec, expr_ptr left) {
+bool alg::parse::new_binary_right(alg::expr_ptr& tree, int exprPrec, expr_ptr left) {
 	while (lex::any()) {
 		int prec = current_precedence();
 		
-		if (prec < exprPrec)
-			return left;
+		if (prec < exprPrec) {
+			tree = std::move(left);
+			return true;
+		}
 		
 		int op = lex::token();
 		lex::next_token();
-		auto right = new_primary();
+		expr_ptr right = nullptr;
 		
-		if (!right)
-			return nullptr;
+		if (!new_primary(right))
+			return false;
+		
+		if (!right) {
+			tree = nullptr;
+			return true;
+		}
 		
 		if (prec <= current_precedence()) {
-			right = new_binary_right(prec, std::move(right));
+			expr_ptr temp = std::move(right);
 			
-			if (!right)
-				return nullptr;
+			if (!new_binary_right(right, prec, std::move(temp)))
+				return false;
+			
+			if (!right) {
+				tree = nullptr;
+				return true;
+			}
 		}
 		
 		left = std::make_unique<Binary>(op, std::move(left), std::move(right));
 	}
 	
-	return std::move(left);
+	tree = std::move(left);
+	return true;
 }
 
-alg::expr_ptr alg::parse::new_tree(const std::string& buf) {
+bool alg::parse::new_tree(alg::expr_ptr& tree, const std::string& buf) {
 	start(buf);
-	return std::move(new_expression());
+	return new_expression(tree);
 }

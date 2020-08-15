@@ -46,7 +46,7 @@ namespace alg
 	
 	class Expression {
 	public:
-		virtual flt_t evaluate() = 0;
+		virtual bool evaluate(flt_t&) = 0;
 		virtual ~Expression() = default;
 	};
 	
@@ -60,7 +60,7 @@ namespace alg
 	public:
 		Binary(char op, expr_ptr left, expr_ptr right);
 		virtual ~Binary() override;
-		virtual flt_t evaluate() override;
+		virtual bool evaluate(flt_t&) override;
 	};
 	
 	class Unary: public Expression {
@@ -70,7 +70,7 @@ namespace alg
 	public:
 		Unary(char op, expr_ptr right);
 		virtual ~Unary() override;
-		virtual flt_t evaluate() override;
+		virtual bool evaluate(flt_t&) override;
 	};
 	
 	class Name: public Expression {
@@ -79,7 +79,7 @@ namespace alg
 	public:
 		Name(const std::string& payload);
 		virtual ~Name() override;
-		virtual flt_t evaluate() override;
+		virtual bool evaluate(flt_t&) override;
 	};
 	
 	class Terminal: public Expression {
@@ -88,7 +88,7 @@ namespace alg
 	public:
 		Terminal(flt_t payload);
 		virtual ~Terminal() override;
-		virtual flt_t evaluate() override;
+		virtual bool evaluate(flt_t&) override;
 	};
 	
 	class Functional: public Expression {
@@ -98,7 +98,7 @@ namespace alg
 	public:
 		Functional(const std::string& name);
 		virtual ~Functional() override;
-		virtual flt_t evaluate() override;
+		virtual bool evaluate(flt_t&) override;
 		Functional& push(expr_ptr argument);
 		size_t argc() const;
 	};
@@ -156,14 +156,14 @@ namespace alg
 		
 		int current_precedence();
 		
-		expr_ptr new_error(const std::string& msg);
-		expr_ptr new_terminal();
-		expr_ptr new_group();
-		expr_ptr new_identifier();
-		expr_ptr new_primary();
-		expr_ptr new_expression();
-		expr_ptr new_binary_right(int exprPrec, expr_ptr left);
-		expr_ptr new_tree(const std::string& buf);
+		bool new_error(expr_ptr& tree, const std::string& msg);
+		bool new_terminal(expr_ptr& tree);
+		bool new_group(expr_ptr& tree);
+		bool new_identifier(expr_ptr& tree);
+		bool new_primary(expr_ptr& tree);
+		bool new_expression(expr_ptr& tree);
+		bool new_binary_right(expr_ptr& tree, int exprPrec, expr_ptr left);
+		bool new_tree(expr_ptr& tree, const std::string& buf);
 	};
 	
 	void test_lexer(std::ostream& out);

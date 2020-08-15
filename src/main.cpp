@@ -22,16 +22,14 @@ int main(int argc, char** argv) {
 		else
 		if (strequal(argv[1], "parse")) {
 			std::cout << std::setprecision(15);
+			alg::expr_ptr tree;
 			
-			try {
-				auto what = alg::parse::new_tree(argv[2])->evaluate();
-				std::cout << what << '\n';
-			}
-			catch (alg::parse::Exception e) {
-				std::cout << "Error: " << e.msg() << '\n';
-			}
-			catch (...) {
-				std::cout << "Error\n";
+			if (alg::parse::new_tree(tree, argv[2])) {
+				flt_t value;
+				
+				if (tree->evaluate(value)) {
+					std::cout << value << '\n';
+				}
 			}
 		}
 	}
