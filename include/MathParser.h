@@ -100,6 +100,7 @@ namespace alg
 		virtual ~Functional() override;
 		virtual flt_t evaluate() override;
 		Functional& push(expr_ptr argument);
+		size_t argc() const;
 	};
 	
 	enum class Tokens {
@@ -143,11 +144,19 @@ namespace alg
 	
 	namespace parse
 	{
+		class Exception {
+		private:
+			std::string _msg;
+		public:
+			Exception(const std::string& msg);
+			const std::string& msg() const;
+		};
+		
 		void start(const std::string& buf);
 		
 		int current_precedence();
 		
-		expr_ptr new_error(const char* msg);
+		expr_ptr new_error(const std::string& msg);
 		expr_ptr new_terminal();
 		expr_ptr new_group();
 		expr_ptr new_identifier();

@@ -101,6 +101,10 @@ alg::Functional& alg::Functional::push(alg::expr_ptr argument) {
 	return *this;
 }
 
+size_t alg::Functional::argc() const {
+	return _arguments.size();
+}
+
 
 std::map<std::string, flt_t> alg::lex::_named_values;
 size_t alg::lex::_index;
@@ -218,6 +222,13 @@ int alg::lex::next_token() {
 }
 
 
+alg::parse::Exception::Exception(const std::string& msg):
+	_msg(msg) {}
+	
+const std::string& alg::parse::Exception::msg() const {
+	return _msg;
+}
+
 void alg::parse::start(const std::string& buf) {
 	alg::lex::start(buf);
 	alg::lex::next_token();
@@ -235,8 +246,8 @@ int alg::parse::current_precedence() {
 	return prec;
 }
 
-alg::expr_ptr alg::parse::new_error(const char* msg) {
-	fprintf(stderr, "Error: %s\n", msg);
+alg::expr_ptr alg::parse::new_error(const std::string& msg) {
+	throw Exception(msg);
 	return nullptr;
 }
 
@@ -254,10 +265,10 @@ alg::expr_ptr alg::parse::new_group() {
 		return nullptr;
 	
 	if ((Tokens)lex::token() != Tokens::CLOSE_GROUP)
-		return new_error("expected ')'");
+		throw Exception("expected ')'");
 	
 	lex::next_token();
-	return std::move(ptr);  // TODO: Try `std::move`
+	return std::move(ptr);
 }
 
 alg::expr_ptr alg::parse::new_identifier() {
@@ -268,6 +279,12 @@ alg::expr_ptr alg::parse::new_identifier() {
 		return std::make_unique<Name>(name);
 	
 	lex::next_token();
+	
+	auto it = _functions.find(name);
+	
+	if (it == _functions.end())
+		throw Exception(std::string("no definition found with the name '" + name + "'"));
+	
 	auto functionCall = std::make_unique<Functional>(name);
 	
 	while ((Tokens)lex::token() != Tokens::CLOSE_GROUP) {
@@ -276,8 +293,21 @@ alg::expr_ptr alg::parse::new_identifier() {
 		}
 	}
 	
+	auto overloads = _functions.at(name);
+	
+	if (overloads.find(functionCall->argc()) == overloads.end())
+		throw Exception(
+			std::string(
+				"no overload found for definition '"
+				+ name
+				+ "' that takes "
+				+ std::to_string(functionCall->argc())
+				+ " arguments"
+			)
+		);
+	
 	lex::next_token();
-	return functionCall;
+	return std::move(functionCall);
 }
 
 alg::expr_ptr alg::parse::new_primary() {
@@ -287,13 +317,13 @@ alg::expr_ptr alg::parse::new_primary() {
 	default:
 		op = lex::token();
 		lex::next_token();
-		return std::make_unique<Unary>(op, std::move(new_primary()));
+		return std::move(std::make_unique<Unary>(op, std::move(new_primary())));
 	case Tokens::IDENTIFIER:
-		return new_identifier();
+		return std::move(new_identifier());
 	case Tokens::TERMINAL:
-		return new_terminal();
+		return std::move(new_terminal());
 	case Tokens::OPEN_GROUP:
-		return new_group();
+		return std::move(new_group());
 	case Tokens::CLOSE_GROUP:
 	case Tokens::DELIMITER:
 		lex::next_token();
@@ -309,7 +339,7 @@ alg::expr_ptr alg::parse::new_expression() {
 	if (!left)
 		return nullptr;
 	
-	return new_binary_right(0, std::move(left));
+	return std::move(new_binary_right(0, std::move(left)));
 }
 
 alg::expr_ptr alg::parse::new_binary_right(int exprPrec, expr_ptr left) {
@@ -336,10 +366,10 @@ alg::expr_ptr alg::parse::new_binary_right(int exprPrec, expr_ptr left) {
 		left = std::make_unique<Binary>(op, std::move(left), std::move(right));
 	}
 	
-	return left;
+	return std::move(left);
 }
 
 alg::expr_ptr alg::parse::new_tree(const std::string& buf) {
 	start(buf);
-	return new_expression();
+	return std::move(new_expression());
 }

@@ -1,5 +1,4 @@
 #include "MathParser.h"
-#include <cstring>
 #include <iomanip>
 #include <iostream>
 
@@ -8,9 +7,11 @@
 #define pause(name, value) pass(name, value); std::cin.get()
 #endif
 
+bool strequal(const std::string& first, const std::string& secnd);
+
 int main(int argc, char** argv) {
 	if (argc > 2) {
-		if (!strcmp(argv[1], "lex")) {
+		if (strequal(argv[1], "lex")) {
 			alg::parse::start(argv[2]);
 			
 			while (alg::lex::token() != (int)alg::Tokens::BUFFER_EOF) {
@@ -19,11 +20,32 @@ int main(int argc, char** argv) {
 			}
 		}
 		else
-		if (!strcmp(argv[1], "parse")) {
+		if (strequal(argv[1], "parse")) {
 			std::cout << std::setprecision(15);
-			std::cout << alg::parse::new_tree(argv[2])->evaluate() << '\n';
+			
+			try {
+				auto what = alg::parse::new_tree(argv[2])->evaluate();
+				std::cout << what << '\n';
+			}
+			catch (alg::parse::Exception e) {
+				std::cout << "Error: " << e.msg() << '\n';
+			}
+			catch (...) {
+				std::cout << "Error\n";
+			}
 		}
 	}
 	
 	return 0;
+}
+
+bool strequal(const std::string& first, const std::string& secnd) {
+	if (first.length() != secnd.length())
+		return false;
+	
+	for (int i = 0; i < first.length(); ++i)
+		if (tolower(first[i]) != tolower(secnd[i]))
+			return false;
+	
+	return true;
 }
