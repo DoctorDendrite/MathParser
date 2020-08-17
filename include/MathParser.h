@@ -73,12 +73,14 @@ namespace alg
 		virtual bool evaluate(flt_t&) override;
 	};
 	
-	class Name: public Expression {
+	typedef std::shared_ptr<flt_t> ref_t;
+	
+	class Reference: public Expression {
 	private:
-		std::string _payload;
+		ref_t _ptr;
 	public:
-		Name(const std::string& payload);
-		virtual ~Name() override;
+		Reference(ref_t& ptr);
+		virtual ~Reference() override;
 		virtual bool evaluate(flt_t&) override;
 	};
 	
@@ -156,14 +158,24 @@ namespace alg
 		
 		int current_precedence();
 		
-		bool new_error(expr_ptr& tree, const std::string& msg);
-		bool new_terminal(expr_ptr& tree);
-		bool new_group(expr_ptr& tree);
-		bool new_identifier(expr_ptr& tree);
-		bool new_primary(expr_ptr& tree);
-		bool new_expression(expr_ptr& tree);
-		bool new_binary_right(expr_ptr& tree, int exprPrec, expr_ptr left);
-		bool new_tree(expr_ptr& tree, const std::string& buf);
+		class BookKeep {
+		public:
+			typedef std::map<std::string, ref_t> names_t;
+		private:
+			names_t _named_values;
+		public:
+			BookKeep() = default;
+			virtual ~BookKeep() = default;
+			
+			bool new_error(expr_ptr& tree, const std::string& msg);
+			bool new_terminal(expr_ptr& tree);
+			bool new_group(expr_ptr& tree);
+			bool new_identifier(expr_ptr& tree);
+			bool new_primary(expr_ptr& tree);
+			bool new_expression(expr_ptr& tree);
+			bool new_binary_right(expr_ptr& tree, int exprPrec, expr_ptr left);
+			bool new_tree(expr_ptr& tree, const std::string& buf);
+		};
 	};
 	
 	void test_lexer(std::ostream& out);

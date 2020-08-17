@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 			std::cout << std::setprecision(15);
 			alg::expr_ptr tree;
 			
-			if (alg::parse::new_tree(tree, argv[2])) {
+			if (alg::parse::BookKeep().new_tree(tree, argv[2])) {
 				flt_t value;
 				
 				if (tree->evaluate(value)) {

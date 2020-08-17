@@ -76,13 +76,16 @@ bool alg::Unary::evaluate(flt_t& value) {
 }
 
 
-alg::Name::Name(const std::string& payload):
-	_payload(payload) {}
+alg::Reference::Reference(ref_t& ptr):
+	_ptr(ptr) {}
 	
-alg::Name::~Name() {}
+alg::Reference::~Reference() {}
 
-bool alg::Name::evaluate(flt_t& value) {
-	value = lex::named_value(_payload);
+bool alg::Reference::evaluate(flt_t& value) {
+	if (_ptr == nullptr)
+		return false;
+	
+	value = *_ptr;
 	return true;
 }
 
@@ -269,19 +272,19 @@ int alg::parse::current_precedence() {
 	return prec;
 }
 
-bool alg::parse::new_error(alg::expr_ptr& tree, const std::string& msg) {
+bool alg::parse::BookKeep::new_error(alg::expr_ptr& tree, const std::string& msg) {
 	fprintf(stdout, "Error: %s\n", msg.c_str());
 	return false;
 }
 
-bool alg::parse::new_terminal(alg::expr_ptr& tree) {
+bool alg::parse::BookKeep::new_terminal(alg::expr_ptr& tree) {
 	auto result = std::make_unique<Terminal>(lex::terminal());
 	lex::next_token();
 	tree = std::move(result);
 	return true;
 }
 
-bool alg::parse::new_group(alg::expr_ptr& tree) {
+bool alg::parse::BookKeep::new_group(alg::expr_ptr& tree) {
 	expr_ptr node = nullptr;
 	lex::next_token();
 	
@@ -302,19 +305,26 @@ bool alg::parse::new_group(alg::expr_ptr& tree) {
 	return true;
 }
 
-bool alg::parse::new_identifier(alg::expr_ptr& tree) {
+bool alg::parse::BookKeep::new_identifier(alg::expr_ptr& tree) {
 	std::string name = lex::identifier();
 	lex::next_token();
 	
 	if ((Tokens)lex::token() != Tokens::OPEN_GROUP) {
-		tree = std::make_unique<Name>(name);
+		auto name_it = _named_values.find(name);
+		
+		if (name_it == _named_values.end())
+			return new_error(tree, std::string("no binding with name '" + name + "' is declared in this scope"));
+		
+		// Note: `std::map::find` doesn't enumerate the values in the map;
+		// it enumerates the key-value pairs in the map.
+		tree = std::make_unique<Reference>(name_it->second);
 		return true;
 	}
 	
 	lex::next_token();
-	auto it = _functions.find(name);
+	auto function_it = _functions.find(name);
 	
-	if (it == _functions.end())
+	if (function_it == _functions.end())
 		return new_error(tree, std::string("no definition found with the name '" + name + "'"));
 	
 	auto functionCall = std::make_unique<Functional>(name);
@@ -328,9 +338,9 @@ bool alg::parse::new_identifier(alg::expr_ptr& tree) {
 			functionCall->push(std::move(arg));
 	}
 	
-	auto overloads = _functions.at(name);
-	
-	if (overloads.find(functionCall->argc()) == overloads.end())
+	// Note: `std::map::find` doesn't enumerate the values in the map;
+	// it enumerates the key-value pairs in the map.
+	if (function_it->second.find(functionCall->argc()) == overloads.end())
 		return new_error(
 			tree,
 			std::string(
@@ -347,7 +357,7 @@ bool alg::parse::new_identifier(alg::expr_ptr& tree) {
 	return true;
 }
 
-bool alg::parse::new_primary(alg::expr_ptr& tree) {
+bool alg::parse::BookKeep::new_primary(alg::expr_ptr& tree) {
 	int op;
 	expr_ptr node = nullptr;
 	
@@ -390,7 +400,7 @@ bool alg::parse::new_primary(alg::expr_ptr& tree) {
 	// return new_error(tree, "unknown token when expecting an expression");
 }
 
-bool alg::parse::new_expression(alg::expr_ptr& tree) {
+bool alg::parse::BookKeep::new_expression(alg::expr_ptr& tree) {
 	expr_ptr left = nullptr;
 	
 	if (!new_primary(left))
@@ -407,7 +417,7 @@ bool alg::parse::new_expression(alg::expr_ptr& tree) {
 	return true;
 }
 
-bool alg::parse::new_binary_right(alg::expr_ptr& tree, int exprPrec, expr_ptr left) {
+bool alg::parse::BookKeep::new_binary_right(alg::expr_ptr& tree, int exprPrec, expr_ptr left) {
 	while (lex::any()) {
 		int prec = current_precedence();
 		
@@ -447,7 +457,7 @@ bool alg::parse::new_binary_right(alg::expr_ptr& tree, int exprPrec, expr_ptr le
 	return true;
 }
 
-bool alg::parse::new_tree(alg::expr_ptr& tree, const std::string& buf) {
+bool alg::parse::BookKeep::new_tree(alg::expr_ptr& tree, const std::string& buf) {
 	start(buf);
 	return new_expression(tree);
 }
