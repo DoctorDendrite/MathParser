@@ -7,6 +7,7 @@
 #include <ostream>
 #include <string>
 #include <vector>
+#include <functional>
 
 namespace alg
 {
@@ -14,7 +15,7 @@ namespace alg
 	
 	#define carg_ref const args_t &
 	
-	typedef flt_t (*math_f)(carg_ref);
+	typedef flt_t (*const math_f)(carg_ref);
 	typedef std::map<size_t, math_f> overloads_t;
 	
 	static const std::map<std::string, overloads_t>
@@ -93,15 +94,19 @@ namespace alg
 		virtual bool evaluate(flt_t&) override;
 	};
 	
+	typedef std::reference_wrapper<math_f> math_f_ref;
+	
 	class Functional: public Expression {
 	private:
-		std::string _name;
+		math_f_ref _fn;
 		std::vector<expr_ptr> _arguments;
 	public:
-		Functional(const std::string& name);
+		Functional(math_f_ref fn);
+		Functional(math_f_ref fn, std::vector<expr_ptr>&& args);
 		virtual ~Functional() override;
 		virtual bool evaluate(flt_t&) override;
 		Functional& push(expr_ptr argument);
+		Functional& argv(std::vector<expr_ptr>&& args);
 		size_t argc() const;
 	};
 	
@@ -161,7 +166,7 @@ namespace alg
 		class BookKeep {
 		public:
 			typedef std::map<std::string, ref_t> names_t;
-		private:
+		public:
 			names_t _named_values;
 		public:
 			BookKeep() = default;

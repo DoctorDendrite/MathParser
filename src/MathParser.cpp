@@ -101,8 +101,14 @@ bool alg::Terminal::evaluate(flt_t& value) {
 }
 
 
-alg::Functional::Functional(const std::string& name):
-	_name(name) {}
+// alg::Functional::Functional(const std::string& name):
+// 	_name(name) {}
+
+alg::Functional::Functional(math_f_ref fn):
+	_fn(fn) {}
+
+alg::Functional::Functional(math_f_ref fn, std::vector<expr_ptr>&& args):
+	_fn(fn), _arguments(std::move(args)) {}
 
 alg::Functional::~Functional() {}
 
@@ -117,13 +123,19 @@ bool alg::Functional::evaluate(flt_t& value) {
 		args.push_back(temp);
 	}
 	
-	auto overloads = _functions.at(_name);
-	value = overloads.at(args.size())(args);
+	// auto overloads = _functions.at(_name);
+	// value = overloads.at(args.size())(args);
+	value = _fn(args);
 	return true;
 }
 
 alg::Functional& alg::Functional::push(alg::expr_ptr argument) {
 	_arguments.push_back(std::move(argument));
+	return *this;
+}
+
+alg::Functional& alg::Functional::argv(std::vector<expr_ptr>&& args) {
+	_arguments = std::move(args);
 	return *this;
 }
 
@@ -327,7 +339,7 @@ bool alg::parse::BookKeep::new_identifier(alg::expr_ptr& tree) {
 	if (function_it == _functions.end())
 		return new_error(tree, std::string("no definition found with the name '" + name + "'"));
 	
-	auto functionCall = std::make_unique<Functional>(name);
+	std::vector<expr_ptr> args;
 	expr_ptr arg = nullptr;
 	
 	while ((Tokens)lex::token() != Tokens::CLOSE_GROUP) {
@@ -335,25 +347,27 @@ bool alg::parse::BookKeep::new_identifier(alg::expr_ptr& tree) {
 			return false;
 			
 		if (arg)
-			functionCall->push(std::move(arg));
+			args.push_back(std::move(arg));
 	}
+	
+	auto overload_it = function_it->second.find(args.size());
 	
 	// Note: `std::map::find` doesn't enumerate the values in the map;
 	// it enumerates the key-value pairs in the map.
-	if (function_it->second.find(functionCall->argc()) == overloads.end())
+	if (overload_it == function_it->second.end())
 		return new_error(
 			tree,
 			std::string(
 				"no overload found for definition '"
 				+ name
 				+ "' that takes "
-				+ std::to_string(functionCall->argc())
+				+ std::to_string(args.size())
 				+ " arguments"
 			)
 		);
 	
 	lex::next_token();
-	tree = std::move(functionCall);
+	tree = std::move(std::make_unique<Functional>(overload_it->second, std::move(args)));
 	return true;
 }
 
